@@ -123,7 +123,8 @@ if (isset($_SESSION['user_id'])) {
                 <div class="bg-overlay">
                     <div class="fade-in-up">
                         <h1 class="display-4 fw-bold mb-3">Consorcio<br>Aerohuila</h1>
-                        <p class="lead mb-4 opacity-75">Gestión integral de proveedores, control financiero y auditoría aeroportuaria.</p>
+                        <p class="lead mb-4 opacity-75">Consorcio Aerohuila GE 2452
+Gestion integral de proveedores, costos y presupuestos</p>
                         <div class="d-flex align-items-center gap-3">
                             <div class="badge bg-white text-dark p-2 px-3 rounded-pill"><i class="bi bi-shield-check me-1"></i> Seguro</div>
                             <div class="badge bg-white text-dark p-2 px-3 rounded-pill"><i class="bi bi-lightning-charge me-1"></i> Rápido</div>

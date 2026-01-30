@@ -1,190 +1,273 @@
 <?php
-// 1. INICIAR EL BÚFER INMEDIATAMENTE (Captura cualquier error o espacio en blanco accidental)
+// 1. LIMPIEZA DE BÚFER
 ob_start();
-
 require_once '../config/security.php';
 require_once '../config/db.php';
+ob_clean(); 
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
-    // 2. LIMPIEZA TOTAL: Borramos cualquier alerta o error previo del búfer
-    // Esto asegura que el archivo Excel empiece limpio, sin textos de error.
-    ob_clean(); 
-
-    $tipo = isset($_POST['tipo_reporte']) ? $_POST['tipo_reporte'] : 'reporte';
-    $fecha_actual = date('Y-m-d_H-i');
-    $nombre_archivo = "Reporte_" . $tipo . "_" . $fecha_actual . ".xls";
-
-    // 3. CABECERAS PARA DESCARGA (Forzar UTF-8)
+    $tipo = $_POST['tipo_reporte'];
+    $fecha = date('Y-m-d_H-i');
+    $filename = "Reporte_Aerohuila_$fecha.xls";
+    
+    // 2. HEADERS CORRECTOS
     header("Content-Type: application/vnd.ms-excel; charset=UTF-8");
-    header("Content-Disposition: attachment; filename=$nombre_archivo");
+    header("Content-Disposition: attachment; filename=$filename");
     header("Pragma: no-cache");
     header("Expires: 0");
-
-    // 4. BOM (Byte Order Mark): Esto hace que Excel reconozca tildes y Ñ automáticamente
-    echo "\xEF\xBB\xBF"; 
-
-    // Estilos CSS para la tabla (Simple y compatible con Excel)
-    echo "
-    <style>
-        body { font-family: Arial, sans-serif; }
-        th { background-color: #0f172a; color: white; border: 1px solid #000; padding: 10px; }
-        td { border: 1px solid #ccc; padding: 8px; vertical-align: middle; }
+    
+    // 3. ESTRUCTURA HTML COMPLETA (ESTO ARREGLA EL ERROR VISUAL)
+    echo "<html xmlns:x='urn:schemas-microsoft-com:office:excel'>";
+    echo "<head>";
+    echo "<meta http-equiv='Content-Type' content='text/html; charset=utf-8'>";
+    echo "<style>
+        body { font-family: Arial, sans-serif; font-size: 12px; }
+        .header { background-color: #0f172a; color: #ffffff; font-weight: bold; border: 1px solid #000000; text-align: center; vertical-align: middle; }
+        .subheader { background-color: #334155; color: #ffffff; font-weight: bold; border: 1px solid #000000; }
+        td { border: 1px solid #cccccc; vertical-align: middle; padding: 5px; }
+        .money { text-align: right; mso-number-format:'\#\,\#\#0'; }
+        .center { text-align: center; }
+        .text { mso-number-format:'\@'; } /* Fuerza texto para evitar notación científica */
+        .st-Pagado { background-color: #dcfce7; color: #166534; }
         .st-Pendiente { background-color: #fee2e2; color: #991b1b; }
         .st-Radicado { background-color: #e0f2fe; color: #075985; }
-        .st-Pagado { background-color: #dcfce7; color: #166534; }
         .st-Anulado { background-color: #f3f4f6; color: #4b5563; }
-        .text-center { text-align: center; }
     </style>";
+    echo "</head>";
+    echo "<body>";
 
-    // --- GENERACIÓN DE REPORTES ---
-
-    // CASO 1: REPORTE GLOBAL
-    if ($tipo == 'global_proveedores') {
-        $sql = "SELECT * FROM proveedores ORDER BY nombre ASC";
-        $stmt = $pdo->query($sql);
-        $datos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        echo "<h3>REPORTE GLOBAL DE PROVEEDORES - AEROHUILA</h3>";
-        echo "<table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Nombre</th>
-                        <th>NIT / Cédula</th>
-                        <th>Email</th>
-                        <th>Teléfono</th>
-                        <th>Razón Social / Servicio</th>
-                        <th>Banco</th>
-                        <th>Tipo Cuenta</th>
-                        <th>No. Cuenta</th>
-                        <th>Estado Actual</th>
-                        <th>Fecha Registro</th>
-                    </tr>
-                </thead>
-                <tbody>";
+    // ==========================================
+    // CASO 1: REPORTE INDIVIDUAL DE UNA SOLA ORDEN (NUEVO)
+    // ==========================================
+    if ($tipo == 'individual_orden') {
+        $idOrden = $_POST['id_orden'];
         
-        foreach ($datos as $row) {
-            echo "<tr>
-                    <td>{$row['id']}</td>
-                    <td>{$row['nombre']}</td>
-                    <td>{$row['nit_cedula']}</td>
-                    <td>{$row['email']}</td>
-                    <td>{$row['telefono']}</td>
-                    <td>{$row['razon_social']}</td>
-                    <td>{$row['banco']}</td>
-                    <td>{$row['tipo_cuenta']}</td>
-                    <td>'{$row['numero_cuenta']}</td>
-                    <td class='st-{$row['estado_global']}'>{$row['estado_global']}</td>
-                    <td>{$row['fecha_creacion']}</td>
-                  </tr>";
+        $sql = "SELECT o.*, 
+                       p.nombre as p_nombre, p.nit_cedula, p.razon_social, p.banco, p.tipo_cuenta, p.numero_cuenta, p.email, p.telefono 
+                FROM ordenes_pago o 
+                JOIN proveedores p ON o.proveedor_id = p.id 
+                WHERE o.id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$idOrden]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if($row) {
+            echo "<h3>DETALLE DE ORDEN DE PAGO N° {$row['numero_op']}</h3>";
+            echo "<table>
+                <tr><th class='header' colspan='4'>INFORMACIÓN DEL PROVEEDOR</th></tr>
+                <tr>
+                    <td class='subheader'>Razón Social</td><td>{$row['razon_social']}</td>
+                    <td class='subheader'>NIT/Cédula</td><td class='text'>{$row['nit_cedula']}</td>
+                </tr>
+                <tr>
+                    <td class='subheader'>Contacto</td><td>{$row['p_nombre']}</td>
+                    <td class='subheader'>Teléfono</td><td class='text'>{$row['telefono']}</td>
+                </tr>
+                <tr>
+                    <td class='subheader'>Banco</td><td>{$row['banco']}</td>
+                    <td class='subheader'>Cuenta</td><td class='text'>{$row['tipo_cuenta']} - {$row['numero_cuenta']}</td>
+                </tr>
+                
+                <tr><td colspan='4'></td></tr>
+
+                <tr><th class='header' colspan='4'>DETALLE DE LA ORDEN</th></tr>
+                <tr>
+                    <td class='subheader'>N° OP Manual</td><td class='text'><b>{$row['numero_op']}</b></td>
+                    <td class='subheader'>Fecha Orden</td><td>{$row['fecha_orden']}</td>
+                </tr>
+                <tr>
+                    <td class='subheader'>Estado</td><td class='st-{$row['estado_orden']}'><b>{$row['estado_orden']}</b></td>
+                    <td class='subheader'>Valor Total</td><td class='money'>$ " . number_format($row['valor'], 0, ',', '.') . "</td>
+                </tr>
+                <tr>
+                    <td class='subheader'>Concepto</td><td colspan='3'>{$row['concepto_pago']}</td>
+                </tr>
+                
+                <tr><td colspan='4'></td></tr>
+
+                <tr><th class='header' colspan='4'>INFORMACIÓN DE PAGO</th></tr>
+                <tr>
+                    <td class='subheader'>Fecha Pago</td><td>".($row['fecha_pago']?:'-')."</td>
+                    <td class='subheader'>Soporte Cargado</td><td>".($row['ruta_soporte_pago']?'SI':'NO')."</td>
+                </tr>
+            </table>";
         }
-        echo "</tbody></table>";
     }
 
-    // CASO 2: REPORTE FINANCIERO
+    // ==========================================
+    // CASO 2: REPORTE GENERAL DE ÓRDENES (DESDE LA LUPA)
+    // ==========================================
+    elseif ($tipo == 'general_ordenes') {
+        $busqueda = isset($_POST['busqueda']) ? $_POST['busqueda'] : '';
+        
+        $sql = "SELECT o.*, 
+                       p.nombre as prov_contacto, p.nit_cedula, p.razon_social, p.banco, p.tipo_cuenta, p.numero_cuenta
+                FROM ordenes_pago o 
+                JOIN proveedores p ON o.proveedor_id = p.id 
+                WHERE o.numero_op LIKE ? OR p.razon_social LIKE ? OR p.nit_cedula LIKE ?
+                ORDER BY o.fecha_orden DESC";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(["%$busqueda%", "%$busqueda%", "%$busqueda%"]);
+        $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo "<h3>REPORTE DE BÚSQUEDA DE ÓRDENES</h3>";
+        if($busqueda) echo "<p>Filtro: '$busqueda'</p>";
+        
+        // Renderizar tabla maestra
+        renderTablaMaestra($filas);
+    }
+
+    // ==========================================
+    // CASO 3: REPORTE FINANCIERO (POR FECHAS/ESTADO) - REPARADO
+    // ==========================================
     elseif ($tipo == 'financiero_fechas') {
         $inicio = $_POST['fecha_inicio'];
         $fin = $_POST['fecha_fin'];
         $estado = $_POST['estado_filtro'];
 
-        $sql = "SELECT o.*, p.nombre as proveedor_nombre, p.nit_cedula 
+        $sql = "SELECT o.*, 
+                       p.nombre as prov_contacto, p.nit_cedula, p.razon_social, p.banco, p.tipo_cuenta, p.numero_cuenta
                 FROM ordenes_pago o 
                 JOIN proveedores p ON o.proveedor_id = p.id 
-                WHERE o.fecha_orden BETWEEN ? AND ?";
+                WHERE (o.fecha_orden BETWEEN ? AND ?)";
         
         $params = [$inicio, $fin];
-
-        if ($estado !== 'Todos') {
+        if ($estado != 'Todos') {
             $sql .= " AND o.estado_orden = ?";
             $params[] = $estado;
         }
-
         $sql .= " ORDER BY o.fecha_orden DESC";
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
-        $datos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        echo "<h3>REPORTE FINANCIERO DE ÓRDENES DE PAGO</h3>";
-        echo "<p><strong>Desde:</strong> $inicio <strong>Hasta:</strong> $fin | <strong>Filtro:</strong> $estado</p>";
-        echo "<table>
-                <thead>
-                    <tr>
-                        <th>Fecha Orden</th>
-                        <th>Proveedor</th>
-                        <th>NIT</th>
-                        <th>Concepto del Pago</th>
-                        <th>Valor</th>
-                        <th>Estado Orden</th>
-                        <th>Req.</th>
-                        <th>Fac.</th>
-                        <th>Pago.</th>
-                    </tr>
-                </thead>
-                <tbody>";
-
-        foreach ($datos as $row) {
-            $req = $row['ruta_requisicion'] ? 'SI' : 'NO';
-            $fac = $row['ruta_factura'] ? 'SI' : 'NO';
-            $pag = $row['ruta_orden_pago'] ? 'SI' : 'NO';
-
-            echo "<tr>
-                    <td>{$row['fecha_orden']}</td>
-                    <td>{$row['proveedor_nombre']}</td>
-                    <td>{$row['nit_cedula']}</td>
-                    <td>{$row['concepto_pago']}</td>
-                    <td>$ " . number_format($row['valor'], 0, ',', '.') . "</td>
-                    <td class='st-{$row['estado_orden']}'>{$row['estado_orden']}</td>
-                    <td class='text-center'>$req</td>
-                    <td class='text-center'>$fac</td>
-                    <td class='text-center'>$pag</td>
-                  </tr>";
-        }
-        echo "</tbody></table>";
+        echo "<h3>REPORTE FINANCIERO ($inicio a $fin)</h3>";
+        renderTablaMaestra($filas);
     }
 
-    // CASO 3: HISTORIAL INDIVIDUAL
+    // ==========================================
+    // CASO 4: REPORTE INDIVIDUAL PROVEEDOR
+    // ==========================================
     elseif ($tipo == 'individual_proveedor') {
-        $idProv = $_POST['id_proveedor'];
-
-        $stmtP = $pdo->prepare("SELECT * FROM proveedores WHERE id = ?");
-        $stmtP->execute([$idProv]);
-        $prov = $stmtP->fetch(PDO::FETCH_ASSOC);
-
-        if (!$prov) { echo "Proveedor no encontrado"; exit; }
-
-        $stmtO = $pdo->prepare("SELECT * FROM ordenes_pago WHERE proveedor_id = ? ORDER BY fecha_orden DESC");
-        $stmtO->execute([$idProv]);
-        $ordenes = $stmtO->fetchAll(PDO::FETCH_ASSOC);
-
-        echo "<h3>HISTORIAL INDIVIDUAL: {$prov['nombre']}</h3>";
-        echo "<p><strong>NIT:</strong> {$prov['nit_cedula']} <br> <strong>Estado Actual:</strong> {$prov['estado_global']}</p>";
+        $id = $_POST['id_proveedor'];
+        $prov = $pdo->query("SELECT * FROM proveedores WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
         
+        echo "<h3>HISTORIAL: {$prov['razon_social']} (NIT: {$prov['nit_cedula']})</h3>";
         echo "<table>
-                <thead>
-                    <tr>
-                        <th>Fecha Orden</th>
-                        <th>Concepto</th>
-                        <th>Valor</th>
-                        <th>Estado</th>
-                    </tr>
-                </thead>
-                <tbody>";
+            <tr><td class='subheader'>Banco</td><td>{$prov['banco']}</td><td class='subheader'>Cuenta</td><td class='text'>{$prov['numero_cuenta']}</td></tr>
+            <tr><td class='subheader'>Contacto</td><td>{$prov['nombre']}</td><td class='subheader'>Tel</td><td class='text'>{$prov['telefono']}</td></tr>
+        </table><br>";
+
+        $filas = $pdo->query("SELECT o.*, '{$prov['razon_social']}' as razon_social, '{$prov['nit_cedula']}' as nit_cedula, '{$prov['banco']}' as banco, '{$prov['numero_cuenta']}' as numero_cuenta FROM ordenes_pago o WHERE proveedor_id=$id ORDER BY fecha_orden DESC")->fetchAll(PDO::FETCH_ASSOC);
         
-        foreach ($ordenes as $row) {
+        renderTablaMaestra($filas);
+    }
+
+    // ==========================================
+    // CASO 5: GLOBAL DE PROVEEDORES - REPARADO
+    // ==========================================
+    elseif ($tipo == 'global_proveedores') {
+        $filas = $pdo->query("SELECT * FROM proveedores ORDER BY razon_social ASC")->fetchAll(PDO::FETCH_ASSOC);
+        
+        echo "<h3>DIRECTORIO DE PROVEEDORES</h3>";
+        echo "<table>
+            <thead>
+                <tr class='subheader'>
+                    <th>ID</th>
+                    <th>Razón Social</th>
+                    <th>NIT/Cédula</th>
+                    <th>Contacto</th>
+                    <th>Email</th>
+                    <th>Teléfono</th>
+                    <th>Banco</th>
+                    <th>Tipo Cta</th>
+                    <th># Cuenta</th>
+                    <th>Estado Global</th>
+                    <th>Fecha Registro</th>
+                </tr>
+            </thead>
+            <tbody>";
+        foreach($filas as $r) {
             echo "<tr>
-                    <td>{$row['fecha_orden']}</td>
-                    <td>{$row['concepto_pago']}</td>
-                    <td>$ " . number_format($row['valor'], 0, ',', '.') . "</td>
-                    <td class='st-{$row['estado_orden']}'>{$row['estado_orden']}</td>
-                  </tr>";
+                <td>{$r['id']}</td>
+                <td>{$r['razon_social']}</td>
+                <td class='text'>{$r['nit_cedula']}</td>
+                <td>{$r['nombre']}</td>
+                <td>{$r['email']}</td>
+                <td class='text'>{$r['telefono']}</td>
+                <td>{$r['banco']}</td>
+                <td>{$r['tipo_cuenta']}</td>
+                <td class='text'>{$r['numero_cuenta']}</td>
+                <td>{$r['estado_global']}</td>
+                <td>{$r['fecha_creacion']}</td>
+            </tr>";
         }
         echo "</tbody></table>";
     }
+
+    echo "</body></html>";
     
-    // 5. ENVIAR AL NAVEGADOR Y FINALIZAR
     ob_end_flush();
     exit;
+}
+
+// FUNCIÓN HELPER PARA TABLAS DE ÓRDENES (EVITA REPETIR CÓDIGO)
+function renderTablaMaestra($filas) {
+    echo "<table>
+        <thead>
+            <tr class='subheader'>
+                <th>Razón Social</th>
+                <th>NIT / Cédula</th>
+                <th>Banco</th>
+                <th># Cuenta</th>
+                
+                <th>N° OP</th>
+                <th>Fecha Orden</th>
+                <th>Concepto</th>
+                <th>Valor ($)</th>
+                <th>Estado</th>
+                <th>Fecha Pago</th>
+                
+                <th>Fac/Cot</th>
+                <th>Soporte Pago</th>
+                <th>OP Firmada</th>
+            </tr>
+        </thead>
+        <tbody>";
+    
+    foreach($filas as $row) {
+        $f_pago = $row['fecha_pago'] ? $row['fecha_pago'] : '-';
+        $fac = $row['ruta_factura'] ? 'SI' : '-';
+        $sop = $row['ruta_soporte_pago'] ? 'SI' : '-';
+        $opf = $row['ruta_op_firmada'] ? 'SI' : '-';
+        
+        // Manejar datos de proveedor que pueden venir con diferentes alias
+        $razon = $row['razon_social'] ?? '';
+        $nit = $row['nit_cedula'] ?? '';
+        $banco = $row['banco'] ?? '';
+        $cta = $row['numero_cuenta'] ?? '';
+
+        echo "<tr>
+            <td>$razon</td>
+            <td class='text'>$nit</td>
+            <td>$banco</td>
+            <td class='text'>$cta</td>
+            
+            <td class='text center'><b>{$row['numero_op']}</b></td>
+            <td class='center'>{$row['fecha_orden']}</td>
+            <td>{$row['concepto_pago']}</td>
+            <td class='money'>$ " . number_format($row['valor'], 0, ',', '.') . "</td>
+            <td class='st-{$row['estado_orden']} center'>{$row['estado_orden']}</td>
+            <td class='center'>$f_pago</td>
+            
+            <td class='center'>$fac</td>
+            <td class='center'>$sop</td>
+            <td class='center'>$opf</td>
+        </tr>";
+    }
+    echo "</tbody></table>";
 }
 ?>

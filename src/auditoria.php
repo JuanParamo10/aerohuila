@@ -27,7 +27,7 @@ try {
 <body>
 
     <div class="sidebar d-flex flex-column">
-        <div class="text-center mb-4"><h4 class="fw-bold tracking-wider">AEROHUILA</h4><small class="text-light opacity-50">Administración</small></div>
+        <div class="text-center mb-4"><h4 class="fw-bold text-white tracking-wider">AEROHUILA</h4><small class="text-light opacity-50">Administración</small></div>
         <hr class="border-secondary mx-3">
         <a href="dashboard.php"><i class="bi bi-truck me-2"></i> Proveedores</a>
              <a href="ordenes.php"><i class="bi bi-receipt me-2"></i> Ordenes (OP)</a>
